@@ -1,0 +1,70 @@
+# postgres-index benchmark database.
+# Pinned by digest for reproducibility: every published number names this exact image.
+#   postgres:18.4  ->  sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
+# Config is tuned for the benchmark box (32 cores, 93Gi RAM) and recorded in METHODOLOGY.md.
+# Keep these values constant across a scenario's before/after unless the scenario is about a config knob.
+
+services:
+  db:
+    image: postgres:18.4@sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
+    container_name: pgbench-index
+    environment:
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: bench
+      # Deterministic, locale-stable text sorting so index/collation behaviour is reproducible.
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      - "5444:5432"          # non-default host port to avoid clashing with local PG 18.4
+    volumes:
+      # PG18 images place data in a versioned subdir; mount the parent, not .../data.
+      - ./pgdata:/var/lib/postgresql
+    shm_size: "4gb"          # parallel workers + large hash/sort spill to /dev/shm
+    command:
+      - postgres
+      # --- memory ---
+      - -c
+      - shared_buffers=8GB
+      - -c
+      - effective_cache_size=24GB
+      - -c
+      - work_mem=256MB
+      - -c
+      - maintenance_work_mem=2GB
+      # --- planner: SSD-realistic ---
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      # --- parallelism (held constant; scenarios that care set it per-query) ---
+      - -c
+      - max_parallel_workers_per_gather=4
+      - -c
+      - max_parallel_workers=16
+      - -c
+      - max_worker_processes=16
+      # --- WAL / checkpoints: stable so write-amp numbers (scenario 10) are clean ---
+      - -c
+      - max_wal_size=16GB
+      - -c
+      - min_wal_size=2GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=off
+      # --- stats we read in scenarios (HOT rate, index scans, buffers) ---
+      - -c
+      - track_io_timing=on
+      - -c
+      - track_counts=on
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      # --- autovacuum left ON at defaults; scenarios that need a specific VM state
+      #     run VACUUM explicitly so results don't depend on background timing ---
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bench -d bench"]
+      interval: 3s
+      timeout: 5s
+      retries: 20

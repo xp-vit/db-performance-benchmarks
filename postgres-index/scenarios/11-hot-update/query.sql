@@ -1,0 +1,5 @@
+-- The measured operation is repeated updates of the hot column:
+--   UPDATE t11 SET h = h + 1;      -- run several passes
+-- We read the HOT-update rate from pg_stat_user_tables:
+--   n_tup_hot_upd / n_tup_upd
+-- across three configs: (a) no index on h, (b) index on h, (c) index on h + fillfactor 70.

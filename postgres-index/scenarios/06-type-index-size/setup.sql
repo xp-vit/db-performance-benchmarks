@@ -1,0 +1,11 @@
+-- Scenario 06: the indexed column's type decides the index size.
+-- One index per column on the same row count; compare pg_relation_size.
+-- enum (4B) vs short varchar vs long varchar vs smallint (2B); bigint (8B) vs uuid (16B).
+-- run.sh builds these one at a time and measures size, so this file is documentation.
+--   CREATE INDEX ON typesize (status_enum);
+--   CREATE INDEX ON typesize (status_vc_short);
+--   CREATE INDEX ON typesize (status_vc_long);
+--   CREATE INDEX ON typesize (status_smallint);
+--   CREATE INDEX ON typesize (key_bigint);
+--   CREATE INDEX ON typesize (key_uuid4);
+--   CREATE INDEX ON typesize (key_uuid7);

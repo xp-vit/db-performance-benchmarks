@@ -1,0 +1,3 @@
+-- The measured operation is a bulk insert of M rows into a table carrying K indexes:
+--   INSERT INTO t10 SELECT g, ... FROM generate_series(1, M) g;
+-- We record rows/sec and WAL bytes generated (pg_wal_lsn_diff) for K = 0,1,2,3,5,8.

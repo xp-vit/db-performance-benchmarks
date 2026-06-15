@@ -1,0 +1,17 @@
+node_modules/
+*.pyc
+__pycache__/
+.venv/
+pgdata/
+*.log
+
+# Internal docs — kept local, not published
+/AGENT-INSTRUCTIONS.md
+/postgres-index/RESULTS-SUMMARY.md
+
+# Generated artifacts — reproduced by run-all.sh, not committed
+postgres-index/scenarios/**/results.json
+postgres-index/scenarios/**/explains/
+postgres-index/scenarios/**/explain-before.txt
+postgres-index/scenarios/**/explain-after.txt
+postgres-index/charts/*.svg
