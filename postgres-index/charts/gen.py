@@ -35,6 +35,20 @@ def _load(name):
 def esc(s):  # no em/en dashes anywhere in labels
     return str(s).replace("—", "-").replace("–", "-").replace("&", "&amp;").replace("<", "&lt;")
 
+def fmtv(v):  # human-readable, never scientific notation, thousands separators
+    if v is None: return "-"
+    a = abs(v)
+    if a == 0:        return "0"
+    if a >= 1000:     return f"{v:,.0f}"
+    if a >= 100:      return f"{v:.0f}"
+    if a >= 10:       return f"{v:.1f}".rstrip("0").rstrip(".")
+    if a >= 1:        return f"{v:.2f}".rstrip("0").rstrip(".")
+    if a >= 0.01:     return f"{v:.3f}".rstrip("0").rstrip(".")
+    return f"{v:.4f}".rstrip("0").rstrip(".")
+
+def _fmt(value_fmt, v):  # value_fmt may be a callable or a str format spec
+    return value_fmt(v) if callable(value_fmt) else value_fmt.format(v)
+
 def head(title, subtitle):
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family="Inter, system-ui, sans-serif">
 <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
@@ -52,7 +66,7 @@ def save(name, body):
     print("wrote", name)
 
 # ---- generic grouped bar chart (linear or log) ----
-def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms", value_fmt="{:.3g}"):
+def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms", value_fmt=fmtv):
     # groups: list of group labels (x). series: list of (label,color,[values per group])
     x0, x1 = PADL, W - PADR
     y0, y1 = PADT, H - PADB
@@ -83,7 +97,7 @@ def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms",
             if v is None: continue
             s += f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw*0.92:.1f}" height="{bh:.1f}" rx="3" fill="{col}"/>'
             if v and v > 0:
-                s += f'<text x="{bx+bw*0.46:.1f}" y="{by-7:.1f}" fill="{BODY}" font-size="12" text-anchor="middle">{value_fmt.format(v)}</text>'
+                s += f'<text x="{bx+bw*0.46:.1f}" y="{by-7:.1f}" fill="{BODY}" font-size="12" text-anchor="middle">{_fmt(value_fmt, v)}</text>'
         s += f'<text x="{gx+ (bw*ns)/2:.1f}" y="{y1+26:.1f}" fill="{BODY}" font-size="15" text-anchor="middle">{esc(g)}</text>'
     # legend
     lx = x0
@@ -95,13 +109,13 @@ def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms",
     return s + foot(note)
 
 # ---- single-series bar (e.g. sizes, hot rate) ----
-def simple_bars(title, subtitle, labels, values, colors, note="", unit="", value_fmt="{:.3g}", log=False):
+def simple_bars(title, subtitle, labels, values, colors, note="", unit="", value_fmt=fmtv, log=False):
     return grouped_bars(title, subtitle, labels,
                         [("", None, None)] and [(unit, c, [v]) for c, v in []] or
                         [("v", TEAL, values)], note, log, unit, value_fmt) if False else \
         _simple(title, subtitle, labels, values, colors, note, unit, value_fmt, log)
 
-def _simple(title, subtitle, labels, values, colors, note="", unit="", value_fmt="{:.3g}", log=False):
+def _simple(title, subtitle, labels, values, colors, note="", unit="", value_fmt=fmtv, log=False):
     x0, x1 = PADL, W - PADR; y0, y1 = PADT, H - PADB
     vv = [v for v in values if v and v > 0]
     if not vv: return head(title, subtitle) + foot("no data")
@@ -122,13 +136,13 @@ def _simple(title, subtitle, labels, values, colors, note="", unit="", value_fmt
         bx = x0+gw*i+(gw-bw)/2; by=yv(v); bh=y1-by
         col = colors[i] if i < len(colors) else TEAL
         s += f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="3" fill="{col}"/>'
-        s += f'<text x="{bx+bw/2:.1f}" y="{by-8:.1f}" fill="{BODY}" font-size="13" text-anchor="middle">{value_fmt.format(v) if v else "-"}</text>'
+        s += f'<text x="{bx+bw/2:.1f}" y="{by-8:.1f}" fill="{BODY}" font-size="13" text-anchor="middle">{_fmt(value_fmt, v) if v else "-"}</text>'
         s += f'<text x="{bx+bw/2:.1f}" y="{y1+26:.1f}" fill="{BODY}" font-size="14" text-anchor="middle">{esc(lab)}</text>'
     s += f'<text x="{x0-12}" y="{y0-12}" fill="{MUTED}" font-size="13">{esc(unit)}{" (log)" if log else ""}</text>'
     return s + foot(note)
 
 # ---- line chart (curves) ----
-def line_chart(title, subtitle, xlabels, series, note="", unit="ms", log=False, xtitle="", value_fmt="{:.3g}"):
+def line_chart(title, subtitle, xlabels, series, note="", unit="ms", log=False, xtitle="", value_fmt=fmtv):
     # series: list of (label,color,[y values aligned to xlabels])
     x0,x1=PADL,W-PADR; y0,y1=PADT,H-PADB
     allv=[v for _,_,ys in series for v in ys if v is not None and v>0]
@@ -201,7 +215,7 @@ def chart_02():
     save("02-covering-include.svg", grouped_bars(
         "Covering index: shared buffers touched",
         "SELECT sum(amount_cents) WHERE tenant_id=? AND status=?  -  buffers, log scale",
-        sizes, series, log=True, unit="buffers", value_fmt="{:.0f}",
+        sizes, series, log=True, unit="buffers", value_fmt=fmtv,
         note="INCLUDE (amount_cents) turns Index Scan + heap fetch into Index Only Scan."))
 
 def chart_03():
@@ -217,7 +231,7 @@ def chart_03():
     save("03-covering-visibility-map.svg", _simple(
         "Covering index caveat: Heap Fetches track the visibility map",
         f"Index Only Scan, {big} rows  -  Heap Fetches per query across VM states",
-        labs, vals, cols, unit="heap fetches", value_fmt="{:.0f}",
+        labs, vals, cols, unit="heap fetches", value_fmt=fmtv,
         note="An index-only scan stays heap-free only while VACUUM keeps the visibility map current."))
 
 def chart_04():
@@ -247,7 +261,7 @@ def chart_05():
     save("05-brin-size.svg", grouped_bars(
         "BRIN vs B-tree index size on a time-ordered table",
         "index on events(ts)  -  megabytes, log scale",
-        sizes, series, log=True, unit="MB", value_fmt="{:.3g}",
+        sizes, series, log=True, unit="MB", value_fmt=fmtv,
         note="BRIN stores min/max per block range, not per row."))
     # latency ordered vs shuffled
     series2=[("Seq Scan", RED, [next((r["seqscan_ordered_p50_ms"] for r in d if r["size_label"]==s),None) for s in sizes]),
@@ -273,7 +287,7 @@ def chart_06():
     save("06-type-index-size.svg", _simple(
         "Index size by column type",
         f"one index per column, {big} rows  -  megabytes",
-        labs, vals, cols, unit="MB", value_fmt="{:.3g}",
+        labs, vals, cols, unit="MB", value_fmt=fmtv,
         note="Low-cardinality status columns dedup to the same size; uuid vs bigint is the real gap (per-tuple overhead dilutes it below 2x)."))
 
 def chart_07():
@@ -331,13 +345,13 @@ def chart_10():
         "bulk insert  -  rows/sec (higher is better)",
         [str(k) for k in ks],
         [("rows/sec", TEAL, rps)],
-        unit="rows/sec", value_fmt="{:.0f}", xtitle="number of indexes on the table",
+        unit="rows/sec", value_fmt=fmtv, xtitle="number of indexes on the table",
         note="WAL generated grows in step: %0.0f MB at 0 indexes to %0.0f MB at %d indexes." % (wal[0], wal[-1], ks[-1])))
     save("10-write-amp-wal.svg", line_chart(
         "Write amplification: WAL generated vs number of indexes",
         "bulk insert  -  WAL megabytes (lower is better)",
         [str(k) for k in ks], [("WAL MB", AMBER, wal)],
-        unit="MB", value_fmt="{:.0f}", xtitle="number of indexes on the table"))
+        unit="MB", value_fmt=fmtv, xtitle="number of indexes on the table"))
 
 def chart_11():
     d=_load("11-hot-update")
@@ -349,7 +363,7 @@ def chart_11():
     save("11-hot-update.svg", _simple(
         "HOT update rate: indexing a hot column vs fillfactor",
         "repeated UPDATE of column h  -  percent of updates that stayed HOT",
-        labs, vals, cols, unit="% HOT", value_fmt="{:.1f}",
+        labs, vals, cols, unit="% HOT", value_fmt=fmtv,
         note="Fillfactor restores HOT only when the updated column is NOT indexed; indexing it blocks HOT at any fillfactor."))
 
 def chart_12():
@@ -361,7 +375,7 @@ def chart_12():
     save("12-partial-index.svg", grouped_bars(
         "Partial index vs full index size",
         "hot slice is ~5% of rows (status='pending')  -  megabytes",
-        sizes, series, log=False, unit="MB", value_fmt="{:.3g}",
+        sizes, series, log=False, unit="MB", value_fmt=fmtv,
         note="The partial index is a fraction of the full size and at least as fast; the planner only uses it when the predicate matches."))
 
 for fn in [chart_01,chart_02,chart_03,chart_04,chart_05,chart_06,chart_07,chart_08,chart_09,chart_10,chart_11,chart_12]:
