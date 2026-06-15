@@ -1,0 +1,12 @@
+-- Scenario 13: prefix phone search where the column type defeats the index.
+-- Real war story: phone stored as bigint, operations searched `phone LIKE '1234566%'`.
+-- A bigint cannot be LIKE-matched without a cast to text, and a numeric B-tree is
+-- ordered by value, not by digit-string prefix, so the index is dead and the query
+-- seq-scans. Switching to text fixes it, but ONLY if the text can be prefix-matched
+-- against the index: under a non-C collation a plain B-tree still cannot serve LIKE,
+-- you need text_pattern_ops (or a C-collation column). Three variants test that.
+--
+-- The phones13 table is seeded by run.sh per size tier (it owns no shared table).
+-- phone_vc is forced to a non-C ICU collation so variant B reproduces the
+-- "switched to varchar and it was still slow" trap; the box default is C.UTF-8,
+-- under which a plain index would already work (noted in NOTES.md).

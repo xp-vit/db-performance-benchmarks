@@ -82,6 +82,11 @@ Small set of single-column tables / parallel columns on a 10M-row table to compa
 **Topic:** Partial indexes. **Hypothesis:** for the common `WHERE status='pending'` access path (~5% of rows), a partial index `WHERE status='pending'` is a fraction of the full-index size and at least as fast; the planner only uses it when the query predicate matches the partial WHERE.
 **Measure:** index size partial vs full; query latency; demonstrate the planner skipping the partial index when the predicate doesn't match. **Chart:** index size partial vs full (bar) with latency annotation.
 
+### 13 — Prefix phone search: column type defeats the index (real war story)  [E]
+**Topic:** Why you added an index and nothing got faster (the type/collation case). **Origin:** a real engagement, an operations tool searching customers by `phone LIKE '1234566%'` taking ~30s; phone stored as `bigint`; switching to text dropped it to ~100ms. **Hypothesis:** three variants on a dedicated `phones13` table (own seed) at 1M/3M/10M/30M. **A** `bigint` + numeric B-tree, query `phone_bi::text LIKE 'p%'`: per-row cast, numeric index useless, Seq Scan. **B** `text` column in a non-`C` (ICU) collation + plain B-tree: still cannot serve `LIKE 'p%'`, Seq Scan (the "switched to varchar and it was still slow" trap). **C** `text` + B-tree `text_pattern_ops`: range / index-only scan.
+**Measure:** p50/p95 for A/B/C across sizes; confirm Seq Scan on A and B, index used on C; index size. **Chart:** grouped bars A/B/C across sizes, log scale.
+**Result (warm, parallel):** at 30M A=453ms, B=287ms, C=0.08ms (A->C ~5,600x). Warm+parallel is why A is sub-second here; cold and unparallelized is the seconds-to-tens-of-seconds the team saw. Box default collation is `C.UTF-8` (under which a plain text index would already serve LIKE), so variant B forces ICU collation to reproduce the trap.
+
 ---
 
 ## Not in scope
@@ -90,4 +95,4 @@ Topics not covered here (skip-scan deep-dive, citext/collation, keyset paginatio
 
 ## Definition of done
 
-12 scenario folders with data + EXPLAIN + chart, `METHODOLOGY.md`, and `run-all.sh` reproducing everything from a clean clone, with per-scenario `NOTES.md` recording which hypotheses held, which surprised, and any number less dramatic than the common claim.
+13 scenario folders with data + EXPLAIN + chart, `METHODOLOGY.md`, and `run-all.sh` reproducing everything from a clean clone, with per-scenario `NOTES.md` recording which hypotheses held, which surprised, and any number less dramatic than the common claim.

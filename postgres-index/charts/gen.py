@@ -391,6 +391,19 @@ def chart_12():
         sizes, series, log=False, unit="MB", value_fmt=fmtv,
         note="The partial index is a fraction of the full size and at least as fast; the planner only uses it when the predicate matches."))
 
-for fn in [chart_01,chart_02,chart_03,chart_04,chart_05,chart_06,chart_07,chart_08,chart_09,chart_10,chart_11,chart_12]:
+def chart_13():
+    d=_load("13-bigint-phone-like")
+    if not d: return
+    sizes=by_size(d)
+    series=[("bigint + cast (Seq Scan)",        RED,   [next((r["a_bigint_p50_ms"]        for r in d if r["size_label"]==s),None) for s in sizes]),
+            ("varchar, plain index (Seq Scan)",  AMBER, [next((r["b_varchar_plain_p50_ms"]  for r in d if r["size_label"]==s),None) for s in sizes]),
+            ("varchar, text_pattern_ops",        TEAL,  [next((r["c_pattern_ops_p50_ms"]     for r in d if r["size_label"]==s),None) for s in sizes])]
+    save("13-bigint-phone-like.svg", grouped_bars(
+        "Prefix phone search: column type vs the index",
+        "WHERE phone LIKE '150000%'  -  p50, warm cache, log scale",
+        sizes, series, log=True, unit="ms",
+        note="bigint forces a per-row cast; a non-C plain text index still cannot serve LIKE; text_pattern_ops can."))
+
+for fn in [chart_01,chart_02,chart_03,chart_04,chart_05,chart_06,chart_07,chart_08,chart_09,chart_10,chart_11,chart_12,chart_13]:
     try: fn()
     except Exception as e: print("WARN", fn.__name__, e)
