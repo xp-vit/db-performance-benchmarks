@@ -49,6 +49,24 @@ def fmtv(v):  # human-readable, never scientific notation, thousands separators
 def _fmt(value_fmt, v):  # value_fmt may be a callable or a str format spec
     return value_fmt(v) if callable(value_fmt) else value_fmt.format(v)
 
+def _gridlines(yv, allv, vmax, x0, x1, y0, y1, log):
+    # log axes get one labelled line per decade so the chart reads as log,
+    # not as a linear chart whose bars look out of proportion.
+    s = ""
+    if log:
+        dmin = int(math.floor(math.log10(min(allv))))
+        dmax = int(math.ceil(math.log10(vmax)))
+        for d in range(dmin, dmax + 1):
+            gy = yv(10.0 ** d)
+            if gy < y0 - 1 or gy > y1 + 1: continue
+            s += f'<line x1="{x0}" y1="{gy:.1f}" x2="{x1}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>'
+            s += f'<text x="{x0-8:.1f}" y="{gy+4:.1f}" fill="{MUTED}" font-size="11" text-anchor="end">{fmtv(10.0**d)}</text>'
+    else:
+        for i in range(5):
+            gy = y0 + (y1 - y0) * i / 4
+            s += f'<line x1="{x0}" y1="{gy:.1f}" x2="{x1}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>'
+    return s
+
 def head(title, subtitle):
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family="Inter, system-ui, sans-serif">
 <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
@@ -82,10 +100,7 @@ def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms",
             return y1 - (y1 - y0) * (math.log10(max(v, min(allv))) - lo) / (hi - lo)
         return y1 - (y1 - y0) * (v / (vmax * 1.12))
     s = head(title, subtitle)
-    # gridlines
-    for i in range(5):
-        gy = y0 + (y1 - y0) * i / 4
-        s += f'<line x1="{x0}" y1="{gy:.1f}" x2="{x1}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>'
+    s += _gridlines(yv, allv, vmax, x0, x1, y0, y1, log)
     ng = len(groups); ns = len(series)
     gw = (x1 - x0) / ng
     bw = gw * 0.74 / ns
@@ -130,9 +145,7 @@ def _simple(title, subtitle, labels, values, colors, note="", unit="", value_fmt
             return y1-(y1-y0)*(math.log10(v)-lo)/(hi-lo)
         return y1-(y1-y0)*(v/(vmax*1.12))
     s = head(title, subtitle)
-    for i in range(5):
-        gy = y0 + (y1-y0)*i/4
-        s += f'<line x1="{x0}" y1="{gy:.1f}" x2="{x1}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>'
+    s += _gridlines(yv, vv, vmax, x0, x1, y0, y1, log)
     n = len(labels); gw = (x1-x0)/n; bw = gw*0.6
     for i,(lab,v) in enumerate(zip(labels, values)):
         bx = x0+gw*i+(gw-bw)/2; by=yv(v); bh=y1-by
@@ -160,9 +173,7 @@ def line_chart(title, subtitle, xlabels, series, note="", unit="ms", log=False, 
     n=len(xlabels)
     def xv(i): return x0+(x1-x0)*(i/(max(n-1,1)))
     s=head(title,subtitle)
-    for i in range(5):
-        gy=y0+(y1-y0)*i/4
-        s+=f'<line x1="{x0}" y1="{gy:.1f}" x2="{x1}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>'
+    s += _gridlines(yv, allv, vmax, x0, x1, y0, y1, log)
     for i,lab in enumerate(xlabels):
         s+=f'<text x="{xv(i):.1f}" y="{y1+26:.1f}" fill="{BODY}" font-size="14" text-anchor="middle">{esc(lab)}</text>'
     for lbl,col,ys in series:
