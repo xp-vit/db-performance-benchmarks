@@ -78,6 +78,7 @@ def grouped_bars(title, subtitle, groups, series, note="", log=False, unit="ms",
         if log:
             lo = math.log10(min(allv)); hi = math.log10(vmax)
             if hi - lo < 0.5: hi = lo + 1
+            lo -= (hi - lo) * 0.12  # baseline headroom so the smallest bar stays visible
             return y1 - (y1 - y0) * (math.log10(max(v, min(allv))) - lo) / (hi - lo)
         return y1 - (y1 - y0) * (v / (vmax * 1.12))
     s = head(title, subtitle)
@@ -125,6 +126,7 @@ def _simple(title, subtitle, labels, values, colors, note="", unit="", value_fmt
         if log:
             lo = math.log10(min(vv)); hi = math.log10(vmax)
             if hi-lo < 0.5: hi = lo+1
+            lo -= (hi - lo) * 0.12  # baseline headroom so the smallest bar stays visible
             return y1-(y1-y0)*(math.log10(v)-lo)/(hi-lo)
         return y1-(y1-y0)*(v/(vmax*1.12))
     s = head(title, subtitle)
