@@ -30,9 +30,9 @@ run_one() {
   pg < "$HERE/setup.sql" >/dev/null
   for variant in noindex indexed; do
     for N in "${DELETE_NS[@]}"; do
-      # bound the quadratic: skip noindex points that would scan > 5e9 child rows
-      if [ "$variant" = noindex ] && [ $(( N * CHILD_ROWS )) -gt 5000000000 ]; then
-        echo "    noindex N=$N child=$CHILD_ROWS SKIPPED (would scan $(( N * CHILD_ROWS )) rows, > 5e9 cap)" >&2
+      # bound the quadratic: skip noindex points that would scan > 2e10 child rows
+      if [ "$variant" = noindex ] && [ $(( N * CHILD_ROWS )) -gt 20000000000 ]; then
+        echo "    noindex N=$N child=$CHILD_ROWS SKIPPED (would scan $(( N * CHILD_ROWS )) rows, > 2e10 cap)" >&2
         continue
       fi
       local parent; parent="$(seed_fk "$CHILD_ROWS")"

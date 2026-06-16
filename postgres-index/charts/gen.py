@@ -312,7 +312,7 @@ def chart_07():
     save("07-index-ignored.svg", grouped_bars(
         "Why the index was ignored: function wrap and implicit cast",
         f"{big} rows  -  p50, log scale",
-        ["lower(email)","bigint = numeric"],
+        ["WHERE lower(email)=$1","WHERE id='42'"],
         [("index ignored", RED, [r["a_lower_plain_p50_ms"], r["b_cast_p50_ms"]]),
          ("correct index used", TEAL, [r["a_lower_expr_p50_ms"], r["b_typed_p50_ms"]])],
         log=True, unit="ms",
@@ -383,8 +383,8 @@ def chart_12():
     d=_load("12-partial-index")
     if not d: return
     sizes=by_size(d)
-    series=[("full index (status, created_at)", AMBER, [next((r["full_index_bytes"]/1048576 for r in d if r["size_label"]==s),None) for s in sizes]),
-            ("partial WHERE status='pending'", TEAL, [next((r["partial_index_bytes"]/1048576 for r in d if r["size_label"]==s),None) for s in sizes])]
+    series=[("full: (status, created_at), all rows", AMBER, [next((r["full_index_bytes"]/1048576 for r in d if r["size_label"]==s),None) for s in sizes]),
+            ("partial: same columns, WHERE status='pending'", TEAL, [next((r["partial_index_bytes"]/1048576 for r in d if r["size_label"]==s),None) for s in sizes])]
     save("12-partial-index.svg", grouped_bars(
         "Partial index vs full index size",
         "hot slice is ~5% of rows (status='pending')  -  megabytes",

@@ -23,6 +23,7 @@ folklore suggests; the number stands and the writeup says so. Highlights:
 | 10 | Write amplification | inserts/sec and WAL vs number of indexes |
 | 11 | HOT update | indexing a hot column kills HOT; fillfactor only helps when it is not indexed |
 | 12 | Partial index | hot-slice index is a fraction of full size and as fast |
+| 13 | Prefix search vs column type | `LIKE 'p%'` on a bigint cast and a non-C plain index both seq-scan; `text_pattern_ops` serves it |
 
 ## How to run
 
@@ -33,7 +34,7 @@ QUICK=1 ./run-all.sh    # fast dev pass on small tiers
 ```
 
 `run-all.sh` brings up the pinned PostgreSQL 18.4 container, installs the schema + seed +
-timing harness, runs all 12 scenarios across the sweep, and regenerates every chart.
+timing harness, runs all 13 scenarios across the sweep, and regenerates every chart.
 
 To run one scenario:
 
