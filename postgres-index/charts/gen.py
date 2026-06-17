@@ -186,6 +186,7 @@ def line_chart(title, subtitle, xlabels, series, note="", unit="ms", log=False, 
             for i,v in enumerate(ys):
                 if v is None: continue
                 s+=f'<circle cx="{xv(i):.1f}" cy="{yv(v):.1f}" r="4" fill="{col}"/>'
+                s+=f'<text x="{xv(i):.1f}" y="{yv(v)-10:.1f}" fill="{col}" font-size="13" font-weight="700" text-anchor="middle">{value_fmt(v)}</text>'
     lx=x0
     for lbl,col,_ in series:
         s+=f'<rect x="{lx}" y="{H-58}" width="14" height="14" rx="2" fill="{col}"/>'
@@ -337,14 +338,15 @@ def chart_09():
     rows=[r for r in d if r["size_label"]==big]
     ns=sorted({r["delete_n"] for r in rows})
     def curve(variant): return [next((r["delete_ms"] for r in rows if r["variant"]==variant and r["delete_n"]==n), None) for n in ns]
+    noidx=curve("noindex"); mx=max([v for v in noidx if v] or [0]); mins=mx/60000.0
     save("09-unindexed-fk.svg", line_chart(
         "Unindexed foreign key: cascade delete cost",
-        f"child table {big} rows  -  delete time vs number of parents deleted, log scale",
+        f"child table {big} rows  -  delete time (ms) vs number of parents deleted, log scale",
         [str(n) for n in ns],
-        [("no index on FK (O(n^2))", RED, curve("noindex")),
+        [("no index on FK (O(n^2))", RED, noidx),
          ("FK indexed (flat)", TEAL, curve("indexed"))],
         log=True, unit="ms", xtitle="parents deleted (cascading)",
-        note="Without an index on child(parent_id) each parent delete seq-scans the whole child table."))
+        note="Without an index on child(parent_id) each parent delete seq-scans the whole child table. At %d parents that is ~%0.0fs (about %0.1f min); with the index it stays in milliseconds." % (ns[-1], mx/1000.0, mins)))
 
 def chart_10():
     d=_load("10-write-amplification")
