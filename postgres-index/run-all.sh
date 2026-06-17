@@ -3,7 +3,7 @@
 #   ./run-all.sh            full size sweep (1M..30M orders, 1M..100M events)
 #   QUICK=1 ./run-all.sh    fast dev pass (small tiers)
 #
-# Brings up the pinned PG18.4 container, installs schema+harness, runs all 12 scenarios
+# Brings up the pinned PG18.4 container, installs schema+harness, runs all 13 scenarios
 # across the size sweep, then regenerates every chart. Honest-metrics: each number is
 # backed by a committed EXPLAIN and results.json under scenarios/NN-*/.
 set -euo pipefail
@@ -68,10 +68,11 @@ done
 unset SIZE_LABEL EVENT_ROWS
 
 # ---- self-contained scenarios (own sweep dimension) ----
-echo "== scenario 09 (unindexed FK), 10 (write amp), 11 (HOT) =="
+echo "== scenario 09 (unindexed FK), 10 (write amp), 11 (HOT), 13 (phone prefix) =="
 SR 09-unindexed-fk
 SR 10-write-amplification
 SR 11-hot-update
+SR 13-bigint-phone-like
 
 echo "== regenerate charts =="
 python3 charts/gen.py
