@@ -1,0 +1,54 @@
+# Postgres 18 async I/O benchmark rig.
+# Single long-lived container; io_method is swapped via ALTER SYSTEM + restart
+# (io_method is PGC_POSTMASTER). seccomp=unconfined is REQUIRED for io_uring:
+# the default Docker seccomp profile blocks io_uring_setup/io_uring_enter, so
+# io_method=io_uring fails with "could not setup io_uring queue: Operation not
+# permitted". worker/sync do not need it. This is a disclosed methodology
+# caveat (production would ship a custom seccomp profile allowlisting io_uring_*).
+services:
+  pg:
+    image: postgres:18.4@sha256:29ee7bb30d804447dc9a91fd0d74322ae1dc3a4072cc6346f70a5ed6e783b565
+    container_name: pgbench-asyncio
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      POSTGRES_PASSWORD: bench
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      - "5445:5432"
+    shm_size: "2gb"
+    volumes:
+      - ./pgdata:/var/lib/postgresql
+    command:
+      - postgres
+      # --- fixed, disclosed baseline (identical across every io_method arm) ---
+      - -c
+      - shared_buffers=4GB              # deliberately < table size so cold reads hit storage
+      - -c
+      - effective_cache_size=24GB
+      - -c
+      - maintenance_work_mem=2GB        # fixed so VACUUM/REINDEX arms are comparable
+      - -c
+      - work_mem=256MB
+      - -c
+      - max_wal_size=16GB               # avoid checkpoint storms skewing load/vacuum
+      - -c
+      - min_wal_size=2GB
+      - -c
+      - checkpoint_timeout=30min
+      - -c
+      - track_io_timing=on              # per-op I/O timing in EXPLAIN + pg_stat_io
+      - -c
+      - track_wal_io_timing=on
+      - -c
+      - max_parallel_workers=8
+      - -c
+      - max_parallel_workers_per_gather=4
+      # io_method / io_workers / effective_io_concurrency are NOT set here:
+      # the bench scripts sweep them (ALTER SYSTEM + restart, or per-session SET).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

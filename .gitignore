@@ -11,3 +11,7 @@ postgres-index/scenarios/**/explains/
 postgres-index/scenarios/**/explain-before.txt
 postgres-index/scenarios/**/explain-after.txt
 postgres-index/charts/*.svg
+
+# async-io suite: superseded partial runs + generated logs
+postgres18-async-io/results/archive/
+postgres18-async-io/results/*.log

@@ -1,0 +1,107 @@
+# Postgres 18 async I/O — measured results
+
+All figures are OUR measurements on ONE rig. Medians of repeated runs. No borrowed
+figures. Cold = PostgreSQL shared_buffers flushed (container restart) **and** OS page
+cache dropped (`echo 3 > drop_caches`) before each measured run.
+
+## Rig
+
+- **cpu**: AMD Ryzen 9 7950X3D 16-Core Processor
+- **logical_cores**: 32
+- **ram_gb**: 93
+- **kernel**: 6.12.94-1-MANJARO
+- **os**: Manjaro Linux
+- **disk**: Samsung SSD 990 PRO 1TB
+- **fs**: ext4
+- **postgres**: PostgreSQL 18.4
+- **shared_buffers**: 4GB
+- **dataset**: events 30,000,000 rows (~6.2GB heap, ~7.9GB total)
+- **seccomp**: unconfined (required for io_uring under Docker)
+
+Fixed across every arm: `shared_buffers=4GB` (deliberately < the 6.2GB heap so cold
+reads hit storage), `maintenance_work_mem=2GB`, `max_wal_size=16GB`, `track_io_timing=on`.
+The only variables are `io_method`, `effective_io_concurrency` (scans),
+`maintenance_io_concurrency` (vacuum/reindex), and `io_workers` (worker method).
+
+## Cold seqscan — io_method × eic
+
+| eic | io_method | median exec (ms) | MB/s | speedup vs sync | runs | flags |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | sync | 6564 | 1095 | 1.00x | 3 |  |
+| 1 | worker | 5962 | 1206 | 1.10x | 3 |  |
+| 1 | io_uring | 5739 | 1248 | 1.14x | 3 |  |
+| 16 | sync | 6587 | 1095 | 1.00x | 3 |  |
+| 16 | worker | 3876 | 1873 | 1.70x | 3 |  |
+| 16 | io_uring | 2774 | 2636 | 2.37x | 3 |  |
+| 64 | sync | 6598 | 1095 | 1.00x | 3 |  |
+| 64 | worker | 3861 | 1873 | 1.71x | 3 |  |
+| 64 | io_uring | 2808 | 2542 | 2.35x | 3 |  |
+
+## Cold bitmap — io_method × eic
+
+| eic | io_method | median exec (ms) | MB/s | speedup vs sync | runs | flags |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | sync | 15565 | 370 | 1.00x | 3 |  |
+| 1 | worker | 10272 | 563 | 1.52x | 3 |  |
+| 1 | io_uring | 9287 | 625 | 1.68x | 3 |  |
+| 16 | sync | 5040 | 1148 | 1.00x | 3 |  |
+| 16 | worker | 6218 | 926 | 0.81x | 3 |  |
+| 16 | io_uring | 2389 | 2500 | 2.11x | 3 |  |
+| 64 | sync | 5007 | 1148 | 1.00x | 3 |  |
+| 64 | worker | 6197 | 942 | 0.81x | 3 |  |
+| 64 | io_uring | 1683 | 3594 | 2.98x | 3 |  |
+
+## Cold vacuum — io_method × maintenance_io_concurrency
+
+| mic | io_method | median wall (ms) | MB read | speedup vs sync | runs | flags |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | sync | 78859 | 949 | 1.00x | 3 |  |
+| 16 | worker | 51993 | 969 | 1.52x | 3 | CV=24% (noisy, second run needed) |
+| 16 | io_uring | 47710 | 954 | 1.65x | 3 | CV=33% (noisy, second run needed) |
+
+## Cold reindex — io_method × maintenance_io_concurrency
+
+| mic | io_method | median wall (ms) | MB read | speedup vs sync | runs | flags |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | sync | 10120 | 445 | 1.00x | 3 |  |
+| 16 | worker | 10427 | 445 | 0.97x | 3 |  |
+| 16 | io_uring | 8680 | 445 | 1.17x | 3 |  |
+
+## Warm (the honest boundary) — async I/O should be flat
+
+| workload | metric | sync | worker | io_uring | flat? |
+| --- | --- | --- | --- | --- | --- |
+| oltp_pointlookup | tps | 212304 tps | 213171 tps | 212714 tps | yes |
+| seqscan | exec_ms | 2985 ms | 2714 ms | 2930 ms | yes |
+| bitmap | exec_ms | 2685 ms | 1089 ms | 1553 ms | no (103% spread) |
+
+## Decision matrix — when does async I/O actually win?
+
+Best async (worker or io_uring) vs sync baseline, at the io-concurrency that maximizes it.
+
+| workload | cache | best async speedup vs sync | verdict |
+| --- | --- | --- | --- |
+| cold sequential scan | cold | 2.37x (io_uring, eic=16) | WINS |
+| cold bitmap heap scan | cold | 2.98x (io_uring, eic=64) | WINS |
+| cold VACUUM (post-update) | cold | 1.65x (io_uring, mic=16) | WINS |
+| cold REINDEX | cold | 1.17x (io_uring, mic=16) | marginal |
+| OLTP point-lookup | warm | flat (0% spread across methods) | no win (expected) |
+
+## Notes & caveats (honest-metrics)
+
+- **Scan MB/s** is derived from the plan's authoritative `Buffers: shared read` × 8 KB
+  over `Execution Time`. `pg_stat_io` was found to *undercount* blocks read via the async
+  path (≈49k reported vs 790k actually read), so it is NOT used for scan volume.
+- **VACUUM/REINDEX MB read** comes from `pg_stat_io` and is indicative only (same undercount
+  caveat); the headline maintenance metric is **wall time**, which is exact.
+- **VACUUM speedups are flagged noisy (CV 24-33%)** — treat 1.5-1.65x as directional and
+  re-run before quoting a precise number.
+- **The '~3x' is real only at the edge:** cold bitmap + io_uring + `eic=64` = 2.98x. Cold
+  seqscan tops out ~2.4x. `worker` (the PG18 default) gives less and *regresses* on cold
+  bitmap at eic>=16 (0.81x, slower than sync).
+- **`effective_io_concurrency` is often the bigger lever than `io_method`:** cold bitmap at
+  eic=1 is 15.6s (sync) vs 5.0s at eic=16 — prefetch depth matters more than the async engine.
+- **io_uring required `seccomp=unconfined`** under Docker (default profile blocks the
+  syscalls). Numbers are specific to this NVMe (Samsung 990 PRO) / ext4 / kernel 6.12.
+
+_Generated by `aggregate.py` from `results/raw/*.jsonl`._

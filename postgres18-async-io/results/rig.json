@@ -1,0 +1,13 @@
+{
+  "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor",
+  "logical_cores": 32,
+  "ram_gb": 93,
+  "kernel": "6.12.94-1-MANJARO",
+  "disk": "Samsung SSD 990 PRO 1TB",
+  "fs": "ext4",
+  "postgres": "PostgreSQL 18.4",
+  "shared_buffers": "4GB",
+  "dataset": "events 30,000,000 rows (~6.2GB heap, ~7.9GB total)",
+  "seccomp": "unconfined (required for io_uring under Docker)",
+  "os": "Manjaro Linux"
+}
